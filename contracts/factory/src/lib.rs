@@ -172,6 +172,11 @@ pub struct TtlExtended {
 pub trait FactoryGovernance {
     fn set_admin(env: Env, new_admin: Address) -> Result<(), FactoryError>;
     fn set_stream_contract(env: Env, stream_contract: Address) -> Result<(), FactoryError>;
+    fn deploy_stream_contract(
+        env: Env,
+        wasm_hash: BytesN<32>,
+        salt: BytesN<32>,
+    ) -> Result<Address, FactoryError>;
     fn set_cap(env: Env, max_deposit: i128) -> Result<(), FactoryError>;
     fn set_min_duration(env: Env, min_duration: u64) -> Result<(), FactoryError>;
     fn set_allowlist(env: Env, recipient: Address, allowed: bool) -> Result<(), FactoryError>;
@@ -766,6 +771,31 @@ impl FluxoraFactory {
         Ok(())
     }
 
+    /// Deploy the governance-approved stream implementation and configure it
+    /// as the factory's stream contract.
+    ///
+    /// The candidate hash must match the value installed through
+    /// `set_stream_wasm_hash` (or supplied during `init`) before deployment.
+    pub fn deploy_stream_contract(
+        env: Env,
+        wasm_hash: BytesN<32>,
+        salt: BytesN<32>,
+    ) -> Result<Address, FactoryError> {
+        let mut config = Self::guard(&env)?;
+        if wasm_hash != config.stream_wasm_hash {
+            return Err(FactoryError::UnauthorizedImplementation);
+        }
+
+        let stream_contract = env
+            .deployer()
+            .with_current_contract(salt)
+            .deploy_v2(wasm_hash, ());
+        config.stream_contract = stream_contract.clone();
+        env.storage().instance().set(&DataKey::Config, &config);
+        bump_ttl(&env);
+        Ok(stream_contract)
+    }
+
     /// Update the reviewed WASM hash for the configured stream contract.
     pub fn set_stream_wasm_hash(
         env: Env,
@@ -1149,6 +1179,14 @@ impl FactoryGovernance for FluxoraFactory {
 
     fn set_stream_contract(env: Env, stream_contract: Address) -> Result<(), FactoryError> {
         FluxoraFactory::set_stream_contract(env, stream_contract)
+    }
+
+    fn deploy_stream_contract(
+        env: Env,
+        wasm_hash: BytesN<32>,
+        salt: BytesN<32>,
+    ) -> Result<Address, FactoryError> {
+        FluxoraFactory::deploy_stream_contract(env, wasm_hash, salt)
     }
 
     fn set_cap(env: Env, max_deposit: i128) -> Result<(), FactoryError> {

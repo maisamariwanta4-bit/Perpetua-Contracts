@@ -177,6 +177,26 @@ fn test_set_stream_wasm_hash_round_trip() {
     assert_eq!(factory.get_factory_config().stream_wasm_hash, new_hash);
 }
 
+#[test]
+fn test_deploy_stream_contract_rejects_unapproved_wasm_hash() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let fid = env.register_contract(None, FluxoraFactory);
+    let factory = FluxoraFactoryClient::new(&env, &fid);
+    let admin = Address::generate(&env);
+    let sc = Address::generate(&env);
+    let unapproved_hash = BytesN::from_array(&env, &[8; 32]);
+    let salt = BytesN::from_array(&env, &[4; 32]);
+
+    factory.init(&admin, &sc, &stream_hash(&env), &5_000, &200);
+
+    assert_eq!(
+        factory.try_deploy_stream_contract(&unapproved_hash, &salt),
+        Err(Ok(FactoryError::UnauthorizedImplementation))
+    );
+    assert_eq!(factory.get_factory_config().stream_contract, sc);
+}
+
 /// Calling `init` a second time returns `AlreadyInitialized`.
 #[test]
 fn test_init_double_returns_already_initialized() {

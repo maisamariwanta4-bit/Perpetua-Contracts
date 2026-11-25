@@ -297,6 +297,8 @@ pub enum CallData {
     FactorySetStreamContract(Address),
     /// `set_stream_wasm_hash(reviewed_wasm_hash)`
     FactorySetStreamWasmHash(BytesN<32>),
+    /// `deploy_stream_contract(approved_wasm_hash, salt)`
+    FactoryDeployStreamContract(BytesN<32>, BytesN<32>),
 }
 
 /// Decode `calldata` bytes into a `CallData` variant.
@@ -414,6 +416,13 @@ fn dispatch_operation(env: &Env, target: &Address, op: CallData) -> Result<(), G
                 target,
                 &Symbol::new(env, "set_stream_wasm_hash"),
                 (new_hash,).into_val(env),
+            );
+        }
+        CallData::FactoryDeployStreamContract(wasm_hash, salt) => {
+            env.invoke_contract::<Address>(
+                target,
+                &Symbol::new(env, "deploy_stream_contract"),
+                (wasm_hash, salt).into_val(env),
             );
         }
     }
@@ -5319,11 +5328,14 @@ mod tests {
     fn test_max_batch_payload_fits_within_max_calldata_bytes() {
         let ctx = Ctx::setup();
         let target = deploy_batch_target(&ctx);
-        // Largest inner payload governance can dispatch: a 32-byte wasm hash.
+        // Largest inner payload governance can dispatch: an approved hash and salt.
         let worst = entry(
             &ctx.env,
             &target,
-            CallData::FactorySetStreamWasmHash(BytesN::from_array(&ctx.env, &[0x11; 32])),
+            CallData::FactoryDeployStreamContract(
+                BytesN::from_array(&ctx.env, &[0x11; 32]),
+                BytesN::from_array(&ctx.env, &[0x22; 32]),
+            ),
         );
         let entries = vec![
             &ctx.env,
